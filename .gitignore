@@ -36,3 +36,6 @@ venv/
 
 # Vercel
 .vercel
+
+# Local helper script
+deploy.sh

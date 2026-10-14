@@ -10,10 +10,37 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="MoodMap API")
+
+
+# Every error goes back to the React app as JSON with a readable "detail" message.
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    fields = {str(err["loc"][-1]) for err in exc.errors()}
+    if "password" in fields:
+        message = "Password must be 8 to 72 characters."
+    elif "email" in fields:
+        message = "Please enter a valid email address."
+    else:
+        message = "Some of the submitted data is not valid."
+    return JSONResponse(status_code=422, content={"detail": message})
+
+
+@app.exception_handler(httpx.HTTPError)
+async def supabase_unreachable(request: Request, exc: httpx.HTTPError):
+    print(f"Supabase request failed: {type(exc).__name__}: {exc}")
+    return JSONResponse(status_code=503, content={"detail": "Could not reach the database. Please try again in a moment."})
+
+
+@app.exception_handler(Exception)
+async def unexpected_error(request: Request, exc: Exception):
+    print(f"Unexpected error: {type(exc).__name__}: {exc}")
+    return JSONResponse(status_code=500, content={"detail": f"Server error ({type(exc).__name__}). Please try again."})
 
 HABIT_IDS = {"sleep", "move", "water", "focus", "connect", "outside"}
 HABIT_LABELS = {
@@ -29,7 +56,8 @@ HABIT_LABELS = {
 # ---------- Supabase configuration (environment variables only) ----------
 
 def _env(name: str) -> str:
-    value = os.environ.get(name)
+    # strip() guards against spaces or line breaks pasted into the Vercel settings
+    value = (os.environ.get(name) or "").strip()
     if not value:
         raise HTTPException(status_code=500, detail=f"Server is missing the {name} environment variable")
     return value
@@ -87,7 +115,7 @@ def _session_payload(body: dict) -> dict:
     return {
         "access_token": body["access_token"],
         "expires_in": body.get("expires_in"),
-        "email": body.get("user", {}).get("email"),
+        "email": (body.get("user") or {}).get("email"),
     }
 
 

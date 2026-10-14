@@ -56,7 +56,7 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
   const response = await fetch(`/api${path}`, { ...options, headers })
   const body = await response.json().catch(() => ({}))
   if (!response.ok) {
-    const detail = typeof body.detail === 'string' ? body.detail : 'Please check your details and try again.'
+    const detail = typeof body.detail === 'string' ? body.detail : `Something went wrong (error ${response.status}). Please try again.`
     throw new ApiError(detail, response.status)
   }
   return body as T
